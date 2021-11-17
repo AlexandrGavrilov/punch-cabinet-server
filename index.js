@@ -14,6 +14,6 @@ app.use(jsonParser);
 
 app.use('/api/auth', auth)
 
-app.listen(3001, () => {
-    console.log(`Example app listening at http://localhost:${3001}`)
+app.listen(8080, () => {
+    console.log(`app listening at http://localhost:${8080}`)
 })
