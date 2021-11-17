@@ -4,13 +4,11 @@ const jwt = require("jsonwebtoken");
 const router = express.Router();
 const nodemailer = require("nodemailer");
 
-const auth = require("../midlewares/auth");
-
 const db = require("../db/connect");
 
 const randomInt = require("../utils/randomInt");
 
-router.post("/register", auth, async (req, res) => {
+router.post("/register", async (req, res) => {
     try {
         const { email, password, name } = req.body;
         if (!(email && password && name)) {
@@ -47,7 +45,7 @@ router.post("/register", auth, async (req, res) => {
 
 });
 
-router.post("/login", auth, async (req, res) => {
+router.post("/login", async (req, res) => {
     try {
         const { email, password } = req.body;
         if (!(email && password)) {
