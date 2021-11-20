@@ -2,7 +2,9 @@ const express = require('express');
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const router = express.Router();
-const nodemailer = require("nodemailer");
+
+const authMiddleware = require('../middlewares/auth')
+const mailer = require('../services/mailer');
 
 const db = require("../db/connect");
 
@@ -37,6 +39,8 @@ router.post("/register", async (req, res) => {
 
         );
 
+        user.password = undefined;
+
         return res.status(201).json(user);
     } catch (e) {
         console.log(e);
@@ -66,6 +70,7 @@ router.post("/login", async (req, res) => {
             return res.status(201).json(user);
 
         }
+
         return res.status(409).send('Invalid credentials')
     } catch (e) {
         res.status(500).send('Unknown error')
@@ -73,49 +78,101 @@ router.post("/login", async (req, res) => {
 
 });
 
+router.get('/token', authMiddleware, async (req, res) => {
+    try {
+        console.log(req.user, 'wwwwwwww')
+        const { email } = req.user;
+
+        const dbConnect = db.getDb();
+
+        const Users = await dbConnect.collection("users");
+
+        const user = await Users.findOne({ email });
+
+        if (!user) {
+            res.status(404).send('token is invalid');
+        }
+
+        user.password = undefined;
+
+        res.status(201).send(user)
+
+    } catch (e) {
+        res.status(500).send('Unknown error')
+    }
+    console.log(req.user)
+})
+
 router.post("/verify", async (req, res) => {
     try {
         const { email } = req.body;
 
         if (!email) {
-            return res.status(409).send('Email is required');
+            return res.status(400).send('Email is required');
         }
+        const dbConnect = db.getDb();
+
+        const Users = await dbConnect.collection("users");
+
+        const oldUser = await Users.findOne({ email });
+
+        if (oldUser) {
+            return res.status(409).send('email already exists')
+        }
+
+        const EmailsVerify = await dbConnect.collection('emails_verifys');
+
+        const user = await EmailsVerify.findOne({ email });
 
         const code = randomInt();
 
-        let transporter = nodemailer.createTransport({
-            host: "smtp.mailtrap.io",
-            port: 2525,
-            auth: {
-                user: process.env.SMTP_USER,
-                pass: process.env.SMTP_PASS
-            }
-        });
-        console.log(transporter)
-
-
-
-        // const s = await transporter.verify();
-        // console.log(s, 'ererer');
-
-        let info = await transporter.sendMail({
-            from: '"Fred Foo 👻" <foo@example.com>',
-            to: "gavrilov.alex.official@gmail.com",
+        let info = await mailer.send({
+            to: email,
             subject: "Hello ✔",
-            text: "Hello world?" + code,
-            html: "<b>Hello world?</b>",
+            html: `<b>Your verification code ${code}</b>`,
         });
-        console.log(info, 'QWEQWE')
 
+        if (user) {
+            await EmailsVerify.update({ _id: user._id }, { $set: { code }});
+        } else {
+            await EmailsVerify.insertOne({ code, email, isVerified: false });
+        }
 
+        return res.status(200).send('code has been sent')
 
-        // const dbConnect = db.getDb();
-        // const EmailsVerify = await dbConnect.collection('emails_verifys');
-        // await EmailsVerify.insertOne({ code, email })
     } catch (e) {
         console.log(e)
         res.status(500).send('Unknown error')
     }
 })
+
+router.post('/confirm-verify', async (req, res) => {
+    try {
+        const { code, email } = req.body;
+
+        if (!(code && email)) {
+            return res.status(400).send('Email and code is required');
+        }
+
+        const dbConnect = db.getDb();
+
+        const EmailsVerify = await dbConnect.collection('emails_verifys');
+        const user = await EmailsVerify.findOne({ email });
+
+        if (!user) {
+            return res.status(400).send('User is not defined');
+        }
+
+        if (code === user.code) {
+            EmailsVerify.update({ _id: user._id }, { $set: { isVerified: true }});
+            return res.status(201).send('Confirmed')
+        }
+
+        return res.status(409).send('Not valid code')
+    } catch (e) {
+        res.status(500).send('Unknown error')
+    }
+})
+
 
 module.exports = router;
